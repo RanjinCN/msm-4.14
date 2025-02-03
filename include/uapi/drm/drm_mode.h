@@ -99,10 +99,6 @@ extern "C" {
 #define  DRM_MODE_FLAG_PIC_AR_16_9 \
 			(DRM_MODE_PICTURE_ASPECT_16_9<<19)
 
-#define  DRM_MODE_FLAG_SUPPORTS_RGB		(1<<23)
-#define  DRM_MODE_FLAG_SUPPORTS_YUV		(1<<24)
-#define  DRM_MODE_FLAG_SEAMLESS			(1<<31)
-
 /* DPMS flags */
 /* bit compatible with the xorg definitions. */
 #define DRM_MODE_DPMS_ON	0
@@ -443,7 +439,6 @@ struct drm_mode_fb_cmd {
 
 #define DRM_MODE_FB_INTERLACED	(1<<0) /* for interlaced framebuffers */
 #define DRM_MODE_FB_MODIFIERS	(1<<1) /* enables ->modifer[] */
-#define DRM_MODE_FB_SECURE	(1<<2) /* for secure framebuffers */
 
 struct drm_mode_fb_cmd2 {
 	__u32 fb_id;

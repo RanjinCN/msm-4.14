@@ -2289,8 +2289,6 @@ static struct devinet_sysctl_table {
 					      "route_localnet"),
 		DEVINET_SYSCTL_FLUSHING_ENTRY(DROP_UNICAST_IN_L2_MULTICAST,
 					      "drop_unicast_in_l2_multicast"),
-		DEVINET_SYSCTL_RW_ENTRY(NF_IPV4_DEFRAG_SKIP,
-					"nf_ipv4_defrag_skip"),
 	},
 };
 
@@ -2326,7 +2324,7 @@ static int __devinet_sysctl_register(struct net *net, char *dev_name,
 free:
 	kfree(t);
 out:
-	return -ENOBUFS;
+	return -ENOMEM;
 }
 
 static void __devinet_sysctl_unregister(struct net *net,

@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2016, Linaro Ltd
- * Copyright (c) 2018-2019, The Linux Foundation, All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,6 +29,8 @@
 #include <linux/workqueue.h>
 #include <linux/list.h>
 
+#include <linux/delay.h>
+#include <linux/rpmsg.h>
 #include <linux/rpmsg/qcom_glink.h>
 
 #include "qcom_glink_native.h"
@@ -80,14 +81,9 @@ static size_t glink_smem_rx_avail(struct qcom_glink_pipe *np)
 	tail = le32_to_cpu(*pipe->tail);
 
 	if (head < tail)
-		len = pipe->native.length - tail + head;
+		return pipe->native.length - tail + head;
 	else
-		len = head - tail;
-
-	if (WARN_ON_ONCE(len > pipe->native.length))
-		len = 0;
-
-	return len;
+		return head - tail;
 }
 
 static void glink_smem_rx_peak(struct qcom_glink_pipe *np,
@@ -98,10 +94,6 @@ static void glink_smem_rx_peak(struct qcom_glink_pipe *np,
 	u32 tail;
 
 	tail = le32_to_cpu(*pipe->tail);
-
-	if (WARN_ON_ONCE(tail > pipe->native.length))
-		return;
-
 	tail += offset;
 	if (tail >= pipe->native.length)
 		tail -= pipe->native.length;
@@ -124,7 +116,7 @@ static void glink_smem_rx_advance(struct qcom_glink_pipe *np,
 
 	tail += count;
 	if (tail >= pipe->native.length)
-		tail %= pipe->native.length;
+		tail -= pipe->native.length;
 
 	*pipe->tail = cpu_to_le32(tail);
 }
@@ -149,9 +141,6 @@ static size_t glink_smem_tx_avail(struct qcom_glink_pipe *np)
 	else
 		avail -= FIFO_FULL_RESERVE + TX_BLOCKED_CMD_RESERVE;
 
-	if (WARN_ON_ONCE(avail > pipe->native.length))
-		avail = 0;
-
 	return avail;
 }
 
@@ -160,9 +149,6 @@ static unsigned int glink_smem_tx_write_one(struct glink_smem_pipe *pipe,
 					    const void *data, size_t count)
 {
 	size_t len;
-
-	if (WARN_ON_ONCE(head > pipe->native.length))
-		return head;
 
 	len = min_t(size_t, count, pipe->native.length - head);
 	if (len)

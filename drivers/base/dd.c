@@ -227,44 +227,23 @@ void device_unblock_probing(void)
 	driver_deferred_probe_trigger();
 }
 
-static void enable_trigger_defer_cycle(void)
-{
-	driver_deferred_probe_enable = true;
-	driver_deferred_probe_trigger();
-	/*
-	 * Sort as many dependencies as possible before the next initcall
-	 * level
-	 */
-	flush_work(&deferred_probe_work);
-}
-
 /**
  * deferred_probe_initcall() - Enable probing of deferred devices
  *
  * We don't want to get in the way when the bulk of drivers are getting probed.
  * Instead, this initcall makes sure that deferred probing is delayed until
- * all the registered initcall functions at a particular level are completed.
- * This function is invoked at every *_initcall_sync level.
+ * late_initcall time.
  */
 static int deferred_probe_initcall(void)
 {
-	enable_trigger_defer_cycle();
-	driver_deferred_probe_enable = false;
-	return 0;
-}
-arch_initcall_sync(deferred_probe_initcall);
-subsys_initcall_sync(deferred_probe_initcall);
-fs_initcall_sync(deferred_probe_initcall);
-device_initcall_sync(deferred_probe_initcall);
-
-static int deferred_probe_enable_fn(void)
-{
-	/* Enable deferred probing for all time */
-	enable_trigger_defer_cycle();
+	driver_deferred_probe_enable = true;
+	driver_deferred_probe_trigger();
+	/* Sort as many dependencies as possible before exiting initcalls */
+	flush_work(&deferred_probe_work);
 	initcalls_done = true;
 	return 0;
 }
-late_initcall(deferred_probe_enable_fn);
+late_initcall(deferred_probe_initcall);
 
 /**
  * device_is_bound() - Check if device is bound to a driver
@@ -653,6 +632,11 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	} else if (ret == -EPROBE_DEFER) {
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
+		/*
+		 * Device can't match with a driver right now, so don't attempt
+		 * to match or bind with other drivers on the bus.
+		 */
+		return ret;
 	} else if (ret < 0) {
 		dev_dbg(dev, "Bus failed to match device: %d", ret);
 		return ret;
@@ -795,9 +779,18 @@ static int __driver_attach(struct device *dev, void *data)
 	} else if (ret == -EPROBE_DEFER) {
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
+		/*
+		 * Driver could not match with device, but may match with
+		 * another device on the bus.
+		 */
+		return 0;
 	} else if (ret < 0) {
-		dev_dbg(dev, "Bus failed to match device: %d", ret);
-		return ret;
+		dev_dbg(dev, "Bus failed to match device: %d\n", ret);
+		/*
+		 * Driver could not match with device, but may match with
+		 * another device on the bus.
+		 */
+		return 0;
 	} /* ret > 0 means positive match */
 
 	if (dev->parent)	/* Needed for USB */

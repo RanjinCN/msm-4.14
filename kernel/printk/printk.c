@@ -59,10 +59,6 @@
 #include "braille.h"
 #include "internal.h"
 
-#ifdef CONFIG_EARLY_PRINTK_DIRECT
-extern void printascii(char *);
-#endif
-
 int console_printk[4] = {
 	CONSOLE_LOGLEVEL_DEFAULT,	/* console_loglevel */
 	MESSAGE_LOGLEVEL_DEFAULT,	/* default_message_loglevel */
@@ -129,8 +125,10 @@ static int __control_devkmsg(char *str)
 
 static int __init control_devkmsg(char *str)
 {
-	if (__control_devkmsg(str) < 0)
+	if (__control_devkmsg(str) < 0) {
+		pr_warn("printk.devkmsg: bad option string '%s'\n", str);
 		return 1;
+	}
 
 	/*
 	 * Set sysctl string accordingly:
@@ -152,7 +150,7 @@ static int __init control_devkmsg(char *str)
 	 */
 	devkmsg_log |= DEVKMSG_LOG_MASK_LOCK;
 
-	return 0;
+	return 1;
 }
 __setup("printk.devkmsg=", control_devkmsg);
 
@@ -1879,10 +1877,6 @@ int vprintk_store(int facility, int level,
 		}
 	}
 
-#ifdef CONFIG_EARLY_PRINTK_DIRECT
-	printascii(text);
-#endif
-
 	if (level == LOGLEVEL_DEFAULT)
 		level = default_message_loglevel;
 
@@ -2100,8 +2094,15 @@ static int __init console_setup(char *str)
 	char *s, *options, *brl_options = NULL;
 	int idx;
 
-	if (str[0] == 0)
+	/*
+	 * console="" or console=null have been suggested as a way to
+	 * disable console output. Use ttynull that has been created
+	 * for exacly this purpose.
+	 */
+	if (str[0] == 0 || strcmp(str, "null") == 0) {
+		__add_preferred_console("ttynull", 0, NULL, NULL);
 		return 1;
+	}
 
 	if (_braille_console_setup(&str, &brl_options))
 		return 1;
@@ -2193,8 +2194,6 @@ void resume_console(void)
 	console_unlock();
 }
 
-#ifdef CONFIG_CONSOLE_FLUSH_ON_HOTPLUG
-
 /**
  * console_cpu_notify - print deferred console messages after CPU hotplug
  * @cpu: unused
@@ -2213,8 +2212,6 @@ static int console_cpu_notify(unsigned int cpu)
 	}
 	return 0;
 }
-
-#endif
 
 /**
  * console_lock - lock the console system for exclusive use.
@@ -2831,7 +2828,7 @@ void __init console_init(void)
 static int __init printk_late_init(void)
 {
 	struct console *con;
-	int ret = 0;
+	int ret;
 
 	for_each_console(con) {
 		if (!(con->flags & CON_BOOT))
@@ -2853,15 +2850,13 @@ static int __init printk_late_init(void)
 			unregister_console(con);
 		}
 	}
-#ifdef CONFIG_CONSOLE_FLUSH_ON_HOTPLUG
 	ret = cpuhp_setup_state_nocalls(CPUHP_PRINTK_DEAD, "printk:dead", NULL,
 					console_cpu_notify);
 	WARN_ON(ret < 0);
 	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN, "printk:online",
 					console_cpu_notify, NULL);
 	WARN_ON(ret < 0);
-#endif
-	return ret;
+	return 0;
 }
 late_initcall(printk_late_init);
 
